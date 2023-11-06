@@ -31,19 +31,46 @@ logger.LogManager.getLogger("org.apache.spark.util.ShutdownHookManager"). setLev
 logger.LogManager.getLogger("org.apache.spark.SparkEnv"). setLevel( logger.Level.ERROR )
 
 #Define a Schema which describes the Parquet files under the silver reviews directory on S3
-silver_schema = None
+silver_schema = StructType([
+    StructField("customer_id", StringType(), False)
+    ,StructField("customer_name", StringType(), False)
+    ,StructField("gender", StringType(), False)
+    ,StructField("date_of_birth", DateType(), False)
+    ,StructField("city", StringType(), False)
+    ,StructField("state", StringType(), False)
+    ,StructField("marketplace", StringType(), nullable=False)
+    ,StructField("review_id", StringType(), nullable=False)
+    ,StructField("product_id", StringType(), nullable=False)
+    ,StructField("product_parent", StringType(), nullable=False)
+    ,StructField("product_title", StringType(), nullable=False)
+    ,StructField("product_category", StringType(), nullable=False)
+    ,StructField("star_rating", IntegerType(), nullable=False)
+    ,StructField("helpful_votes", IntegerType(), nullable=False)
+    ,StructField("total_votes", IntegerType(), nullable=False)
+    ,StructField("vine", StringType(), nullable=False)
+    ,StructField("verified_purchase", StringType(), nullable=False)
+    ,StructField("review_headline", StringType(), nullable=False)
+    ,StructField("review_body", StringType(), nullable=False)
+    ,StructField("purchase_date", DateType(), nullable=False)
+    ,StructField("review_timestamp", TimestampType(), nullable=False)
+])
 
 #Define a streaming dataframe using readStream on top of the silver reviews directory on S3
-silver_data = None
+silver_data = spark.readStream.schema(silver_schema).parquet("s3a://hwe-fall-2023/sbrown/silver/reviews/")
 
 #Define a watermarked_data dataframe by defining a watermark on the `review_timestamp` column with an interval of 10 seconds
-watermarked_data = None
+watermarked_data = silver_data.withWatermark("review_timestamp", "10 seconds")
 
 #Define an aggregated dataframe using `groupBy` functionality to summarize that data over any dimensions you may find interesting
-aggregated_data = None
+aggregated_data = watermarked_data.groupBy("gender", "helpful_votes", "total_votes", "review_timestamp").count()
 
 #Write that aggregate data to S3 under s3a://hwe-$CLASS/$HANDLE/gold/fact_review using append mode and a checkpoint location of `/tmp/gold-checkpoint`
-write_gold_query = None
+write_gold_query = aggregated_data \
+                    .writeStream \
+                    .outputMode("append") \
+                    .format("delta") \
+                    .option("path", "s3a://hwe-fall-2023/sbrown/gold/gender_votes_review") \
+                    .option("checkpointLocation", "/tmp/gold-checkpoint-1")
 
 write_gold_query.start().awaitTermination()
 
