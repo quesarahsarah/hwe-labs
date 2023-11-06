@@ -50,7 +50,43 @@ df = spark \
     .load()
 
 # Process the received data
-query = None
+
+
+# Modify the `df` dataframe defined in the lab to do the following:
+
+#    * split the value of the Kafka message on tab characters, assigning a field name to each element using the `as` keyword
+#    * append a column to the data named `review_timestamp` which is set to the current_timestamp
+df2 = df \
+    .select(split(col("value").cast("string"), "\t").alias("tsv")) \
+    .select(col("tsv").getItem(0).alias("marketplace"), \
+            col("tsv").getItem(1).alias("customer_id"), \
+            col("tsv").getItem(2).alias("review_id"), \
+            col("tsv").getItem(3).alias("product_id"), \
+            col("tsv").getItem(4).alias("product_parent"), \
+            col("tsv").getItem(5).alias("product_title"), \
+            col("tsv").getItem(6).alias("product_category"), \
+            col("tsv").getItem(7).cast("int").alias("star_rating"), \
+            col("tsv").getItem(8).cast("int").alias("helpful_votes"), \
+            col("tsv").getItem(9).cast("int").alias("total_votes"), \
+            col("tsv").getItem(10).alias("vine"), \
+            col("tsv").getItem(11).alias("verified_purchase"), \
+            col("tsv").getItem(12).alias("review_headline"), \
+            col("tsv").getItem(13).alias("review_body"), \
+            col("tsv").getItem(14).alias("purchase_date")) \
+    .withColumn("review_timestamp", current_timestamp())
+
+
+
+#    * write that data as Parquet files to S3 under `s3a://hwe-$CLASS/$HANDLE/bronze/reviews` using append mode and a checkpoint location of `/tmp/kafka-checkpoint`
+   
+query = df2 \
+  .writeStream \
+  .outputMode("append") \
+  .format("parquet") \
+  .option("path", "s3a://hwe-fall-2023/sbrown/bronze/reviews") \
+  .option("checkpointLocation", "/tmp/kafka-checkpoint") \
+  .start()
+  
 
 # Wait for the streaming query to finish
 query.awaitTermination()
